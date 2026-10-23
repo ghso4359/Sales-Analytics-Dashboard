@@ -1,0 +1,9 @@
+{
+  "name": "Sales Analytics Dashboard",
+  "short_name": "Sales Analytics",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F8F9FB",
+  "theme_color": "#6366F1",
+  "description": "Sales analytics demo using synthetic transactions"
+}

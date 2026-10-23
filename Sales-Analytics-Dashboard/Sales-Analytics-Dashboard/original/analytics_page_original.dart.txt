@@ -1,0 +1,571 @@
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:snack_now_business/models/orderModel.dart';
+import 'package:snack_now_business/models/mock_orders.dart';
+const primary =  Color(0xFF6366F1);
+const bgColor = Color(0xFFF8F9FB);
+const textSecondary = Colors.grey;
+
+class AnalyticsPage extends StatefulWidget {
+  const AnalyticsPage({super.key});
+
+  @override
+  State<AnalyticsPage> createState() => _AnalyticsPageState();
+}
+
+class _AnalyticsPageState extends State<AnalyticsPage> {
+  late int totalOrders;
+  late double totalRevenue;
+  late double avgOrder;
+
+  late double revenueChange;
+  late double ordersChange;
+  late double customersChange;
+  late double avgChange;
+
+  late Map<String, int> itemCount;
+  late List<MapEntry<String, int>> sortedItems;
+
+  late List<BarChartGroupData> _barGroups;
+  late double maxBarY;
+
+  late List<FlSpot> _lineSpots;
+  late double maxLineY;
+
+  late List<PieChartSectionData> _pieSections;
+  int touchedIndex = -1;
+
+  static const List<String> _labels = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    totalOrders = mockOrders.length;
+
+    totalRevenue = mockOrders.fold(
+      0,
+      (sum, order) => sum + order.totalPrice,
+    );
+
+    avgOrder = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    DateTime now = DateTime.now();
+
+    int thisWeekOrders = 0;
+    int lastWeekOrders = 0;
+    double thisWeekRevenue = 0;
+    double lastWeekRevenue = 0;
+
+    Set<String> thisWeekCustomers = {};
+    Set<String> lastWeekCustomers = {};
+
+    for (var order in mockOrders) {
+      int diff = now.difference(order.orderTime).inDays;
+
+      if (diff <= 7) {
+        thisWeekOrders++;
+        thisWeekRevenue += order.totalPrice;
+        thisWeekCustomers.add(order.customerName);
+      } else if (diff <= 14) {
+        lastWeekOrders++;
+        lastWeekRevenue += order.totalPrice;
+        lastWeekCustomers.add(order.customerName);
+      }
+    }
+
+    revenueChange = lastWeekRevenue > 0
+        ? ((thisWeekRevenue - lastWeekRevenue) / lastWeekRevenue) * 100
+        : 0;
+
+    ordersChange = lastWeekOrders > 0
+        ? ((thisWeekOrders - lastWeekOrders) / lastWeekOrders) * 100
+        : 0;
+
+    customersChange = lastWeekCustomers.isNotEmpty
+        ? ((thisWeekCustomers.length - lastWeekCustomers.length) /
+                lastWeekCustomers.length) *
+            100
+        : 0;
+
+    double thisAvg =
+        thisWeekOrders > 0 ? thisWeekRevenue / thisWeekOrders : 0;
+    double lastAvg = lastWeekOrders > 0 ? lastWeekRevenue / lastWeekOrders : 0;
+
+    avgChange = lastAvg > 0 ? ((thisAvg - lastAvg) / lastAvg) * 100 : 0;
+
+    itemCount = {};
+
+    for (var order in mockOrders) {
+      for (var item in order.items) {
+        itemCount[item] = (itemCount[item] ?? 0) + 1;
+      }
+    }
+
+    sortedItems = itemCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    Map<int, int> monthlyOrders = {};
+
+    for (var order in mockOrders) {
+      int month = order.orderTime.month;
+      monthlyOrders[month] = (monthlyOrders[month] ?? 0) + 1;
+    }
+
+    maxBarY = 0;
+
+    for (var entry in monthlyOrders.entries) {
+      if (entry.value > maxBarY) {
+        maxBarY = entry.value.toDouble();
+      }
+    }
+
+    _barGroups = monthlyOrders.entries.map((entry) {
+      return BarChartGroupData(
+        x: entry.key,
+        barRods: [
+          BarChartRodData(
+            toY: entry.value.toDouble(),
+            color: primary,
+          ),
+        ],
+      );
+    }).toList();
+
+    Map<int, double> monthlyRevenue = {};
+
+    for (var order in mockOrders) {
+      int month = order.orderTime.month;
+      monthlyRevenue[month] =
+          (monthlyRevenue[month] ?? 0) + order.totalPrice;
+    }
+
+    maxLineY = 0;
+
+    for (var entry in monthlyRevenue.entries) {
+      if (entry.value > maxLineY) {
+        maxLineY = entry.value;
+      }
+    }
+
+    _lineSpots = monthlyRevenue.entries.map((entry) {
+      return FlSpot(entry.key.toDouble(), entry.value);
+    }).toList();
+
+    Map<String, int> categoryCount = {};
+
+    for (var order in mockOrders) {
+      for (var item in order.items) {
+        categoryCount[item] = (categoryCount[item] ?? 0) + 1;
+      }
+    }
+
+    _pieSections = categoryCount.entries.map((entry) {
+      return PieChartSectionData(
+        value: entry.value.toDouble(),
+        title: entry.key,
+        color: Colors.primaries[entry.key.hashCode % Colors.primaries.length],
+        radius: 50,
+      );
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: bgColor,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          'Analytics',
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: 430,
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      _statCard(
+                        'Weekly Sales',
+                        '\$${totalRevenue.toStringAsFixed(2)}',
+                        revenueChange,
+                        Icons.attach_money,
+                        Colors.amber,
+                      ),
+                      _statCard(
+                        'Orders',
+                        '$totalOrders',
+                        ordersChange,
+                        Icons.shopping_bag,
+                        Colors.blue,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _statCard(
+                        'Customers',
+                        '$totalOrders',
+                        customersChange,
+                        Icons.people,
+                        Colors.green,
+                      ),
+                      _statCard(
+                        'Avg Order',
+                        '\$${avgOrder.toStringAsFixed(2)}',
+                        avgChange,
+                        Icons.access_time,
+                        Colors.purple,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildSectionTitle('Sales'),
+                  _buildLineChartCard(),
+                  const SizedBox(height: 20),
+                  _buildSectionTitle('Orders'),
+                  _buildBarChartCard(),
+                  const SizedBox(height: 20),
+                  _buildSectionTitle('Category'),
+                  _buildPieChartCard(),
+                  const SizedBox(height: 20),
+                  _buildSectionTitle('Top Items'),
+                  _buildCard(
+                    child: Column(
+                      children: sortedItems
+                          .take(5)
+                          .toList()
+                          .asMap()
+                          .entries
+                          .map((entry) {
+                        int index = entry.key;
+                        var item = entry.value;
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: primary,
+                            child: Text('${index + 1}'),
+                          ),
+                          title: Text(item.key),
+                          subtitle: Text('${item.value} sold'),
+                          trailing: const Text('\$--'),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statCard(
+    String title,
+    String value,
+    double change,
+    IconData icon,
+    Color iconColor,
+  ) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.all(6),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+                Icon(icon, color: iconColor, size: 20),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  change >= 0 ? Icons.trending_up : Icons.trending_down,
+                  size: 14,
+                  color: change >= 0 ? Colors.green : Colors.red,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${change.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    color: change >= 0 ? Colors.green : Colors.red,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  'vs last week',
+                  style: TextStyle(
+                    color: textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard({required Widget child}) {
+    return Card(
+      elevation: 1,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildBarChartCard() {
+    return _buildCard(
+      child: SizedBox(
+        height: 240,
+        child: BarChart(
+          BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            maxY: maxBarY + 5,
+            minY: 0,
+            barGroups: _barGroups,
+            gridData: FlGridData(
+              show: true,
+              drawHorizontalLine: true,
+              horizontalInterval: 10,
+            ),
+            borderData: FlBorderData(show: false),
+            titlesData: FlTitlesData(
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 36,
+                  getTitlesWidget: (value, meta) {
+                    int index = value.toInt() - 1;
+
+                    if (index < 0 || index >= _labels.length) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return Text(
+                      _labels[index],
+                      style: const TextStyle(fontSize: 12),
+                    );
+                  },
+                ),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  interval: 10,
+                  reservedSize: 40,
+                  getTitlesWidget: (value, meta) {
+                    return Text(
+                      value.toInt().toString(),
+                      style: const TextStyle(fontSize: 12),
+                    );
+                  },
+                ),
+              ),
+              topTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLineChartCard() {
+    return _buildCard(
+      child: SizedBox(
+        height: 240,
+        child: LineChart(
+          LineChartData(
+            minY: 0,
+            maxY: maxLineY + 10,
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              horizontalInterval: 20,
+            ),
+            titlesData: FlTitlesData(
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 36,
+                  getTitlesWidget: (value, meta) {
+                    int index = value.toInt() - 1;
+
+                    if (index < 0 || index >= _labels.length) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return Text(
+                      _labels[index],
+                      style: const TextStyle(fontSize: 12),
+                    );
+                  },
+                ),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  interval: 40,
+                  reservedSize: 42,
+                  getTitlesWidget: (value, meta) {
+                    return Text(
+                      '\$${value.toInt()}',
+                      style: const TextStyle(fontSize: 12),
+                    );
+                  },
+                ),
+              ),
+              topTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+            ),
+            lineBarsData: [
+              LineChartBarData(
+                spots: _lineSpots,
+                isCurved: true,
+                barWidth: 4,
+                color: primary,
+                dotData: FlDotData(show: true),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: primary.withOpacity(0.2),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPieChartCard() {
+    return _buildCard(
+      child: SizedBox(
+        height: 260,
+        child: PieChart(
+          PieChartData(
+            pieTouchData: PieTouchData(
+              touchCallback: (event, response) {
+                setState(() {
+                  if (!event.isInterestedForInteractions ||
+                      response == null ||
+                      response.touchedSection == null) {
+                    touchedIndex = -1;
+                    return;
+                  }
+
+                  touchedIndex =
+                      response.touchedSection!.touchedSectionIndex;
+                });
+              },
+            ),
+            sections: List.generate(_pieSections.length, (i) {
+              final isTouched = i == touchedIndex;
+
+              return _pieSections[i].copyWith(
+                radius: isTouched ? 70 : 50,
+                titleStyle: TextStyle(
+                  fontSize: isTouched ? 18 : 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              );
+            }),
+            sectionsSpace: 4,
+            centerSpaceRadius: 36,
+            borderData: FlBorderData(show: false),
+          ),
+        ),
+      ),
+    );
+  }
+}
